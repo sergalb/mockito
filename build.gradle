@@ -24,6 +24,7 @@ plugins {
     id 'com.github.ben-manes.versions' version '0.36.0'
     id 'biz.aQute.bnd.builder' version '5.2.0'
     id 'ru.vyarus.animalsniffer' version '1.5.2'
+    id 'org.jetbrains.qodana' version "0.1.4"
 }
 
 description = 'Mockito mock objects library core API and implementation'
@@ -130,7 +131,10 @@ spotless {
         targetExclude 'src/test/java/org/mockitousage/internal/junit/UnusedStubbingsFinderTest.java'
     }
 }
-
+qodana {
+    dockerArguments.addAll(["--mount", "type=volume,dst=/data/project/.gradle"])
+    if (project.hasProperty("qodanaResultsPath")) resultsPath = qodanaResultsPath
+}
 
 //workaround for #1444, delete when Shipkit bug is fixed
 subprojects {
