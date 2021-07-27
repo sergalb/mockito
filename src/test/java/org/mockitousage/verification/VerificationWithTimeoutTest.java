@@ -5,198 +5,161 @@
 
 package org.mockitousage.verification;
 
-import org.assertj.core.api.Assertions;
-import org.assertj.core.api.ThrowableAssert;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.exceptions.base.MockitoAssertionError;
+import org.mockito.exceptions.verification.NoInteractionsWanted;
 import org.mockito.exceptions.verification.TooLittleActualInvocations;
 import org.mockito.junit.MockitoRule;
 import org.mockitousage.IMethods;
-import org.mockitoutil.Stopwatch;
-import org.mockitoutil.async.AsyncTesting;
+import org.mockitoutil.RetryRule;
 
-import java.util.concurrent.TimeUnit;
-
-import static org.mockito.Mockito.after;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.junit.rules.ExpectedException.none;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.junit.MockitoJUnit.rule;
-import static org.mockitoutil.Stopwatch.createNotStarted;
 
 public class VerificationWithTimeoutTest {
 
-    @Rule public MockitoRule mockito = rule();
+    @Rule
+    public MockitoRule mockito = rule();
 
-    private Stopwatch watch = createNotStarted();
+    @Rule
+    public RetryRule retryRule = RetryRule.attempts(4);
 
-    @Mock private IMethods mock;
+    @Rule
+    public ExpectedException exception = none();
 
-    private AsyncTesting async;
+    @Mock
+    private IMethods mock;
+
+    private DelayedExecution delayedExecution;
 
     @Before
     public void setUp() {
-        async = new AsyncTesting();
+        delayedExecution = new DelayedExecution();
     }
 
     @After
-    public void tearDown() {
-        async.cleanUp();
+    public void tearDown() throws InterruptedException {
+        delayedExecution.close();
     }
 
     @Test
-    public void should_verify_with_timeout() {
+    public void shouldVerifyWithTimeout() throws Exception {
         // when
-        async.runAfter(50, callMock('c'));
-        async.runAfter(500, callMock('c'));
+        delayedExecution.callAsync(30, MILLISECONDS, callMock('c'));
 
         // then
-        verify(mock, timeout(200).only()).oneArg('c');
-        verify(mock).oneArg('c'); //sanity check
+        verify(mock, timeout(100)).oneArg('c');
+        verify(mock, timeout(100).atLeastOnce()).oneArg('c');
+        verify(mock, timeout(100).times(1)).oneArg('c');
+        verify(mock).oneArg('c');
+        verify(mock, times(1)).oneArg('c');
     }
 
     @Test
-    public void should_verify_with_timeout_and_fail() {
+    public void shouldFailVerificationWithTimeout() throws Exception {
         // when
-        async.runAfter(200, callMock('c'));
+        delayedExecution.callAsync(30, MILLISECONDS, callMock('c'));
 
         // then
-        Assertions.assertThatThrownBy(new ThrowableAssert.ThrowingCallable() {
-            @Override
-            public void call() {
-                verify(mock, timeout(50).only()).oneArg('c');
-            }
-        }).isInstanceOf(AssertionError.class).hasMessageContaining("Wanted but not invoked");
-        //TODO let's have a specific exception vs. generic assertion error + message
+        verify(mock, never()).oneArg('c');
+        exception.expect(MockitoAssertionError.class);
+        verify(mock, timeout(20).atLeastOnce()).oneArg('c');
     }
 
     @Test
-    @Ignore //TODO nice to have
-    public void should_verify_with_timeout_and_fail_early() {
+    public void shouldAllowMixingOtherModesWithTimeout() throws Exception {
         // when
-        callMock('c');
-        callMock('c');
-
-        watch.start();
+        delayedExecution.callAsync(10, MILLISECONDS, callMock('c'));
+        delayedExecution.callAsync(10, MILLISECONDS, callMock('c'));
 
         // then
-        Assertions.assertThatThrownBy(new ThrowableAssert.ThrowingCallable() {
-            @Override
-            public void call() {
-                verify(mock, timeout(2000)).oneArg('c');
-            }
-        }).isInstanceOf(AssertionError.class).hasMessageContaining("Wanted but not invoked");
-
-        watch.assertElapsedTimeIsLessThan(1000, TimeUnit.MILLISECONDS);
+        verify(mock, timeout(100).atLeast(1)).oneArg('c');
+        verify(mock, timeout(100).times(2)).oneArg('c');
+        verifyNoMoreInteractions(mock);
     }
 
     @Test
-    public void should_verify_with_times_x() {
+    public void shouldAllowMixingOtherModesWithTimeoutAndFail() throws Exception {
         // when
-        async.runAfter(50, callMock('c'));
-        async.runAfter(100, callMock('c'));
-        async.runAfter(600, callMock('c'));
+        delayedExecution.callAsync(10, MILLISECONDS, callMock('c'));
+        delayedExecution.callAsync(10, MILLISECONDS, callMock('c'));
 
         // then
-        verify(mock, timeout(300).times(2)).oneArg('c');
+        verify(mock, timeout(100).atLeast(1)).oneArg('c');
+        exception.expect(TooLittleActualInvocations.class);
+        verify(mock, timeout(100).times(3)).oneArg('c');
     }
 
     @Test
-    public void should_verify_with_times_x_and_fail() {
+    public void shouldAllowMixingOnlyWithTimeout() throws Exception {
         // when
-        async.runAfter(10, callMock('c'));
-        async.runAfter(200, callMock('c'));
+        delayedExecution.callAsync(30, MILLISECONDS, callMock('c'));
 
         // then
-        Assertions.assertThatThrownBy(new ThrowableAssert.ThrowingCallable() {
-            @Override
-            public void call() {
-                verify(mock, timeout(100).times(2)).oneArg('c');
-            }
-        }).isInstanceOf(TooLittleActualInvocations.class);
-    }
-
-    @Test
-    public void should_verify_with_at_least() {
-        // when
-        async.runAfter(10, callMock('c'));
-        async.runAfter(50, callMock('c'));
-
-        // then
-        verify(mock, timeout(200).atLeast(2)).oneArg('c');
-    }
-
-    @Test
-    public void should_verify_with_at_least_once() {
-        // when
-        async.runAfter(10, callMock('c'));
-        async.runAfter(50, callMock('c'));
-
-        // then
-        verify(mock, timeout(200).atLeastOnce()).oneArg('c');
-    }
-
-    @Test
-    public void should_verify_with_at_least_and_fail() {
-        // when
-        async.runAfter(10, callMock('c'));
-        async.runAfter(50, callMock('c'));
-
-        // then
-        Assertions.assertThatThrownBy(new ThrowableAssert.ThrowingCallable() {
-            public void call() {
-                verify(mock, timeout(100).atLeast(3)).oneArg('c');
-            }
-        }).isInstanceOf(TooLittleActualInvocations.class);
-    }
-
-    @Test
-    public void should_verify_with_only() {
-        // when
-        async.runAfter(10, callMock('c'));
-        async.runAfter(300, callMock('c'));
-
-        // then
+        verify(mock, never()).oneArg('c');
         verify(mock, timeout(100).only()).oneArg('c');
     }
 
     @Test
-    @Ignore("not testable, probably timeout().only() does not make sense")
-    public void should_verify_with_only_and_fail() {
+    public void shouldAllowMixingOnlyWithTimeoutAndFail() throws Exception {
         // when
-        async.runAfter(10, callMock('c'));
-        async.runAfter(50, callMock('c'));
+        delayedExecution.callAsync(30, MILLISECONDS, callMock('c'));
+
+        // and when
+        mock.oneArg('x');
 
         // then
-        Assertions.assertThatThrownBy(new ThrowableAssert.ThrowingCallable() {
-            @Override
-            public void call() {
-                verify(mock, after(200).only()).oneArg('c');
-            }
-        }).isInstanceOf(AssertionError.class);
+        verify(mock, never()).oneArg('c');
+        exception.expect(NoInteractionsWanted.class);
+        verify(mock, timeout(100).only()).oneArg('c');
+    }
+
+    /**
+     * This test is JUnit-specific because the code behaves different if JUnit
+     * is used.
+     */
+    @Test
+    public void canIgnoreInvocationsWithJunit() throws InterruptedException {
+        // when
+        delayedExecution.callAsync(10, MILLISECONDS, callMock('1'));
+
+        // then
+        verify(mock, timeout(50)).oneArg('1');
+
+        // when
+        delayedExecution.callAsync(10, MILLISECONDS, callMock('2'));
+        delayedExecution.callAsync(20, MILLISECONDS, callMock('3'));
+
+        // then
+        verify(mock, timeout(50)).oneArg('3');
     }
 
     @Test
-    @Ignore //TODO nice to have
-    public void should_verify_with_only_and_fail_early() {
+    public void shouldAllowTimeoutVerificationInOrder() throws Exception {
         // when
-        callMock('c');
-        callMock('c');
+        delayedExecution.callAsync(50, MILLISECONDS, callMock('1'));
 
-        watch.start();
+        // and when
+        mock.oneArg('x');
 
         // then
-        Assertions.assertThatThrownBy(new ThrowableAssert.ThrowingCallable() {
-            @Override
-            public void call() {
-                verify(mock, timeout(2000).only()).oneArg('c');
-            }
-        }).isInstanceOf(AssertionError.class).hasMessageContaining("Wanted but not invoked"); //TODO specific exception
-
-        watch.assertElapsedTimeIsLessThan(1000, TimeUnit.MILLISECONDS);
+        InOrder inOrder = inOrder(mock);
+        inOrder.verify(mock).oneArg('x');
+        inOrder.verify(mock, never()).oneArg('1');
+        inOrder.verify(mock, timeout(100)).oneArg('1');
     }
 
     private Runnable callMock(final char c) {
