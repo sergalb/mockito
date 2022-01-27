@@ -15,9 +15,12 @@ def measureDockerRun(imageNumber):
 
 
 def measureGc(gc):
+    os.system("docker pull repo.labs.intellij.net/static-analyser/qodana:" + gc)
     times = []
+
     for i in range(1):
-        times.append(measureDockerRun(gc, "yii2"))
+
+        times.append(measureDockerRun(gc))
     return times
 
 
