@@ -16,7 +16,7 @@ def measureDockerRun(imageNumber):
 
 def measureGc(gc):
     times = []
-    for i in range(100):
+    for i in range(1):
         times.append(measureDockerRun(gc, "yii2"))
     return times
 
