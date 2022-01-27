@@ -18,7 +18,7 @@ def measureGc(gc):
     os.system("docker pull repo.labs.intellij.net/static-analyser/qodana:" + gc)
     times = []
 
-    for i in range(1):
+    for i in range(30):
 
         times.append(measureDockerRun(gc))
     return times
