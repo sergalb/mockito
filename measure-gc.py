@@ -27,6 +27,6 @@ zResults = measureGc("20868.2526")
 results = [
            ["G1", statistics.mean(g1Results), statistics.stdev(g1Results), g1Results],
            ["Parallel ", statistics.mean(parallelResults), statistics.stdev(parallelResults), parallelResults],
-           # ["Z", statistics.mean(zResults), statistics.stdev(zResults)],
+           ["Z", statistics.mean(zResults), statistics.stdev(zResults)],
            ]
 print(results)
