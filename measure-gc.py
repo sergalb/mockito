@@ -3,33 +3,37 @@ import time
 import statistics
 
 
-def measureDockerRun(imageNumber):
+def measureDockerRun(imageTag):
     start = time.time()
     os.system("docker run  --rm " +
               "-v $(pwd):/data/project " +
               "-v $(pwd)/out:/data/results " +
-              "-p 10001:10001 repo.labs.intellij.net/static-analyser/qodana:" + imageNumber
+              imageTag
               )
     end = time.time()
     return end - start
 
 
-def measureGc(gc):
-    os.system("docker pull repo.labs.intellij.net/static-analyser/qodana:" + gc)
+def measureGc(gcImageNumber):
+    imageTag = "repo.labs.intellij.net/static-analyser/qodana:" + gcImageNumber
+    os.system("docker pull " + imageTag)
     times = []
 
-    for i in range(15):
-
-        times.append(measureDockerRun(gc))
+    for _ in range(15):
+        times.append(measureDockerRun(imageTag))
     return times
 
 
-parallelResults = measureGc("20868.2523")
-g1Results = measureGc("20868.2521")
-zResults = measureGc("20868.2526")
-results = [
-           ["G1", statistics.mean(g1Results), statistics.stdev(g1Results), g1Results],
-           ["Parallel ", statistics.mean(parallelResults), statistics.stdev(parallelResults), parallelResults],
-           ["Z", statistics.mean(zResults), statistics.stdev(zResults)],
-           ]
-print(results)
+def printResults(resultsName, results):
+    print(resultsName, statistics.mean(results), statistics.stdev(results), results)
+
+
+parallelResults = measureGc("20978.2565")
+g1Results = measureGc("20978.2567")
+zResults = measureGc("20920.2561")
+g1JBR11Results = measureGc("20920.2562")
+
+printResults("Parallel", parallelResults)
+printResults("G1 JBR 17", g1Results)
+printResults("Z", zResults)
+printResults("G1 JBR 11", g1JBR11Results)
